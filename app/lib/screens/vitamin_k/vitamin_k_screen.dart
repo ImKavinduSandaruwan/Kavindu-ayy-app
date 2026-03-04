@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:app/services/tracker_service.dart';
+import 'package:app/services/user_preferences.dart';
+import 'package:intl/intl.dart';
 
 class VitaminKScreen extends StatefulWidget {
   const VitaminKScreen({super.key});
@@ -8,44 +11,98 @@ class VitaminKScreen extends StatefulWidget {
 }
 
 class _VitaminKScreenState extends State<VitaminKScreen> {
+  final _trackerService = TrackerService();
   String? _selectedAnswer;
   double _gramAmount = 50.0;
+  bool _isLoading = false;
 
   bool _canSave() {
-    return _selectedAnswer != null;
+    return _selectedAnswer != null && !_isLoading;
   }
 
-  void _saveRecord() {
-    if (_canSave()) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Row(
-            children: [
-              Icon(Icons.check_circle, color: Colors.white),
-              SizedBox(width: 12),
-              Text(
-                'Saved Successfully',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-              ),
-            ],
-          ),
-          backgroundColor: const Color(0xFF10B981),
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          margin: const EdgeInsets.all(16),
-          duration: const Duration(seconds: 2),
-        ),
+  Future<void> _saveRecord() async {
+    if (!_canSave()) return;
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final userId = await UserPreferences.getUserId();
+      if (userId == null) {
+        _showErrorMessage('User not logged in');
+        return;
+      }
+
+      final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+
+      final success = await _trackerService.saveVitaminK(
+        patientId: userId,
+        date: today,
+        status: _selectedAnswer == 'Yes',
+        weight: _selectedAnswer == 'Yes' ? _gramAmount : null,
       );
 
-      // Navigate back after a short delay
-      Future.delayed(const Duration(seconds: 2), () {
-        if (mounted) {
-          Navigator.pop(context);
-        }
-      });
+      if (!mounted) return;
+
+      if (success) {
+        _showSuccessMessage();
+      } else {
+        _showErrorMessage('Failed to save. Please try again.');
+      }
+    } catch (e) {
+      print('Error saving vitamin K: $e');
+      if (mounted) {
+        _showErrorMessage('An error occurred. Please try again.');
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
+  }
+
+  void _showSuccessMessage() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Row(
+          children: [
+            Icon(Icons.check_circle, color: Colors.white),
+            SizedBox(width: 12),
+            Text(
+              'Saved Successfully',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            ),
+          ],
+        ),
+        backgroundColor: const Color(0xFF10B981),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: const EdgeInsets.all(16),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+
+    // Navigate back to dashboard after a short delay
+    Future.delayed(const Duration(seconds: 2), () {
+      if (mounted) {
+        Navigator.pushReplacementNamed(context, '/dashboard');
+      }
+    });
+  }
+
+  void _showErrorMessage(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: const Color(0xFFEF4444),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: const EdgeInsets.all(16),
+      ),
+    );
   }
 
   @override
@@ -374,20 +431,31 @@ class _VitaminKScreenState extends State<VitaminKScreen> {
                       borderRadius: BorderRadius.circular(16),
                     ),
                   ),
-                  child: const Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.check, size: 22),
-                      SizedBox(width: 8),
-                      Text(
-                        'Save Vitamin K Intake',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600,
+                  child: _isLoading
+                      ? const SizedBox(
+                          height: 24,
+                          width: 24,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.5,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              Colors.white,
+                            ),
+                          ),
+                        )
+                      : const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.check, size: 22),
+                            SizedBox(width: 8),
+                            Text(
+                              'Save Vitamin K Intake',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
-                    ],
-                  ),
                 ),
               ),
 

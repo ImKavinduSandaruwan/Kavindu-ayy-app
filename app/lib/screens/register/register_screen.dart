@@ -1,4 +1,9 @@
+import 'package:app/api.dart';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import '../../services/user_preferences.dart';
+import '../../services/notification_service.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -49,6 +54,159 @@ class _RegisterScreenState extends State<RegisterScreen> {
     return '$hour:$minute';
   }
 
+  String _formatTimeForAPI(TimeOfDay? time) {
+    if (time == null) return '12:30:00';
+    final hour = time.hour.toString().padLeft(2, '0');
+    final minute = time.minute.toString().padLeft(2, '0');
+    return '$hour:$minute:00';
+  }
+
+  bool _validateForm() {
+    if (_fullNameController.text.trim().isEmpty) {
+      _showErrorDialog('Please enter your full name');
+      return false;
+    }
+    if (_ageController.text.trim().isEmpty) {
+      _showErrorDialog('Please enter your age');
+      return false;
+    }
+    if (_weightController.text.trim().isEmpty) {
+      _showErrorDialog('Please enter your weight');
+      return false;
+    }
+    if (_selectedGender == null) {
+      _showErrorDialog('Please select your gender');
+      return false;
+    }
+    if (_selectedValveType == null) {
+      _showErrorDialog('Please select valve type');
+      return false;
+    }
+    if (_selectedValvePosition == null) {
+      _showErrorDialog('Please select valve position');
+      return false;
+    }
+    if (_minINRController.text.trim().isEmpty) {
+      _showErrorDialog('Please enter minimum INR');
+      return false;
+    }
+    if (_maxINRController.text.trim().isEmpty) {
+      _showErrorDialog('Please enter maximum INR');
+      return false;
+    }
+    if (_warfarinDoseController.text.trim().isEmpty) {
+      _showErrorDialog('Please enter warfarin dose');
+      return false;
+    }
+    if (_selectedDoseTime == null) {
+      _showErrorDialog('Please select warfarin dose time');
+      return false;
+    }
+    return true;
+  }
+
+  void _showErrorDialog(String message) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Error'),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showLoadingDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(child: CircularProgressIndicator()),
+    );
+  }
+
+  Future<void> _updateAccount() async {
+    if (!_validateForm()) return;
+
+    _showLoadingDialog();
+
+    try {
+      // Get user ID from SharedPreferences
+      final userId = await UserPreferences.getUserId();
+      if (userId == null) {
+        if (!mounted) return;
+        Navigator.pop(context); // Close loading dialog
+        _showErrorDialog('User ID not found. Please login again.');
+        return;
+      }
+
+      // Prepare the payload
+      final payload = {
+        'fullName': _fullNameController.text.trim(),
+        'age': int.parse(_ageController.text.trim()),
+        'weight': double.parse(_weightController.text.trim()),
+        'gender': _selectedGender,
+        'valveType': _selectedValveType,
+        'valvePosition': _selectedValvePosition,
+        'inrMax': double.parse(_maxINRController.text.trim()),
+        'inrMin': double.parse(_minINRController.text.trim()),
+        'warfarine': double.parse(_warfarinDoseController.text.trim()),
+        'warfarineTime': _formatTimeForAPI(_selectedDoseTime),
+      };
+
+      print('Updating patient data for userId: $userId');
+      print('Payload: $payload');
+
+      // Make the PUT request
+      final response = await http.put(
+        Uri.parse('$baseURL/api/patient/$userId'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode(payload),
+      );
+
+      if (!mounted) return;
+      Navigator.pop(context); // Close loading dialog
+
+      print('Response Status: ${response.statusCode}');
+      print('Response Body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        // Success - save warfarin dose time locally
+        await UserPreferences.saveWarfarinDoseTime(
+          _formatTimeForAPI(_selectedDoseTime),
+        );
+
+        // Schedule notifications (service already initialized in main.dart)
+        final warfarinTimeForNotif = _formatTime(_selectedDoseTime);
+        final notificationService = NotificationService();
+        await notificationService.scheduleWarfarinReminders(
+          warfarinTimeForNotif,
+        );
+        print('Notifications scheduled for: $warfarinTimeForNotif');
+
+        // Navigate to dashboard
+        if (!mounted) return;
+        // Mark registration as done so future logins skip this screen
+        await UserPreferences.setRegistrationCompleted();
+        Navigator.pushReplacementNamed(context, '/dashboard');
+      } else {
+        // Show error message
+        _showErrorDialog(
+          'Failed to update account: ${response.statusCode}\n${response.body}',
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      Navigator.pop(context); // Close loading dialog
+      print('Error updating account: $e');
+      _showErrorDialog('An error occurred: ${e.toString()}');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -67,7 +225,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
           },
         ),
         title: const Text(
-          'Create Account',
+          'Update Account',
           style: TextStyle(
             color: Color(0xFF1A3B5D),
             fontSize: 24,
@@ -339,17 +497,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             Icons.keyboard_arrow_down,
                             color: Color(0xFF9CA3AF),
                           ),
-                          items:
-                              [
-                                'Mechanical Valve',
-                                'Bioprosthetic Valve',
-                                'Tissue Valve',
-                              ].map((String value) {
-                                return DropdownMenuItem<String>(
-                                  value: value,
-                                  child: Text(value),
-                                );
-                              }).toList(),
+                          items: ['Mechanical Valve'].map((String value) {
+                            return DropdownMenuItem<String>(
+                              value: value,
+                              child: Text(value),
+                            );
+                          }).toList(),
                           onChanged: (String? newValue) {
                             setState(() {
                               _selectedValveType = newValue;
@@ -394,17 +547,23 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             Icons.keyboard_arrow_down,
                             color: Color(0xFF9CA3AF),
                           ),
-                          items: ['Aortic', 'Mitral', 'Tricuspid', 'Pulmonary']
-                              .map((String value) {
-                                return DropdownMenuItem<String>(
-                                  value: value,
-                                  child: Text(value),
-                                );
-                              })
-                              .toList(),
+                          items: ['Aortic', 'Mitral'].map((String value) {
+                            return DropdownMenuItem<String>(
+                              value: value,
+                              child: Text(value),
+                            );
+                          }).toList(),
                           onChanged: (String? newValue) {
                             setState(() {
                               _selectedValvePosition = newValue;
+                              // Auto-fill INR range based on valve position
+                              if (newValue == 'Aortic') {
+                                _minINRController.text = '2.0';
+                                _maxINRController.text = '3.0';
+                              } else if (newValue == 'Mitral') {
+                                _minINRController.text = '2.5';
+                                _maxINRController.text = '3.5';
+                              }
                             });
                           },
                         ),
@@ -607,9 +766,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 width: double.infinity,
                 height: 56,
                 child: ElevatedButton(
-                  onPressed: () {
-                    Navigator.pushReplacementNamed(context, '/onboard1');
-                  },
+                  onPressed: _updateAccount,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF2B7EF8),
                     foregroundColor: Colors.white,
@@ -619,7 +776,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     ),
                   ),
                   child: const Text(
-                    'Create Account',
+                    'Update Account',
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
                   ),
                 ),

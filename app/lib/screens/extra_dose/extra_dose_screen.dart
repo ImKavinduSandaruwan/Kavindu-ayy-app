@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:app/services/tracker_service.dart';
+import 'package:app/services/user_preferences.dart';
+import 'package:intl/intl.dart';
 
 class ExtraDoseScreen extends StatefulWidget {
   const ExtraDoseScreen({super.key});
@@ -8,10 +11,12 @@ class ExtraDoseScreen extends StatefulWidget {
 }
 
 class _ExtraDoseScreenState extends State<ExtraDoseScreen> {
+  final _trackerService = TrackerService();
   String? _selectedAnswer;
   final _doseAmountController = TextEditingController();
   TimeOfDay? _selectedTime;
   String? _selectedReason;
+  bool _isLoading = false;
 
   @override
   void dispose() {
@@ -42,45 +47,121 @@ class _ExtraDoseScreenState extends State<ExtraDoseScreen> {
     if (_selectedAnswer == 'Yes') {
       return _doseAmountController.text.isNotEmpty &&
           _selectedTime != null &&
-          _selectedReason != null;
+          _selectedReason != null &&
+          !_isLoading;
     } else if (_selectedAnswer == 'No') {
-      return true;
+      return !_isLoading;
     }
     return false;
   }
 
-  void _saveChanges() {
-    if (_canSave()) {
-      // TODO: Save to database/backend
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Row(
-            children: [
-              Icon(Icons.check_circle, color: Colors.white),
-              SizedBox(width: 12),
-              Text(
-                'Saved Successfully',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-              ),
-            ],
-          ),
-          backgroundColor: const Color(0xFF10B981),
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          margin: const EdgeInsets.all(16),
-          duration: const Duration(seconds: 2),
-        ),
+  Future<void> _saveChanges() async {
+    if (!_canSave()) return;
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final userId = await UserPreferences.getUserId();
+      if (userId == null) {
+        _showErrorMessage('User not logged in');
+        return;
+      }
+
+      final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+
+      // Parse dose amount
+      double? doseAmount;
+      String? time;
+      String? reason;
+
+      if (_selectedAnswer == 'Yes') {
+        doseAmount = double.tryParse(_doseAmountController.text);
+        if (doseAmount == null) {
+          _showErrorMessage('Please enter a valid dose amount');
+          return;
+        }
+
+        // Format time as HH:mm:ss
+        if (_selectedTime != null) {
+          final hour = _selectedTime!.hour.toString().padLeft(2, '0');
+          final minute = _selectedTime!.minute.toString().padLeft(2, '0');
+          time = '$hour:$minute:00';
+        }
+
+        reason = _selectedReason;
+      }
+
+      final success = await _trackerService.saveExtraDose(
+        patientId: userId,
+        date: today,
+        status: _selectedAnswer == 'Yes',
+        doseAmount: doseAmount,
+        time: time,
+        reason: reason,
       );
 
-      // Navigate back after a short delay
-      Future.delayed(const Duration(seconds: 2), () {
-        if (mounted) {
-          Navigator.pop(context);
-        }
-      });
+      if (!mounted) return;
+
+      if (success) {
+        _showSuccessMessage();
+      } else {
+        _showErrorMessage('Failed to save. Please try again.');
+      }
+    } catch (e) {
+      print('Error saving extra dose: $e');
+      if (mounted) {
+        _showErrorMessage('An error occurred. Please try again.');
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
+  }
+
+  void _showSuccessMessage() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Row(
+          children: [
+            Icon(Icons.check_circle, color: Colors.white),
+            SizedBox(width: 12),
+            Text(
+              'Saved Successfully',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            ),
+          ],
+        ),
+        backgroundColor: const Color(0xFF10B981),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: const EdgeInsets.all(16),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+
+    // Navigate back to dashboard after a short delay
+    Future.delayed(const Duration(seconds: 2), () {
+      if (mounted) {
+        Navigator.pushReplacementNamed(context, '/dashboard');
+      }
+    });
+  }
+
+  void _showErrorMessage(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: const Color(0xFFEF4444),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: const EdgeInsets.all(16),
+      ),
+    );
   }
 
   @override
@@ -305,22 +386,34 @@ class _ExtraDoseScreenState extends State<ExtraDoseScreen> {
                   width: double.infinity,
                   height: 56,
                   child: ElevatedButton(
-                    onPressed: _saveChanges,
+                    onPressed: _canSave() ? _saveChanges : null,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF2B7EF8),
                       foregroundColor: Colors.white,
                       elevation: 0,
+                      disabledBackgroundColor: const Color(0xFFD1D5DB),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(16),
                       ),
                     ),
-                    child: const Text(
-                      'Save Record',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
+                    child: _isLoading
+                        ? const SizedBox(
+                            height: 24,
+                            width: 24,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.5,
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                Colors.white,
+                              ),
+                            ),
+                          )
+                        : const Text(
+                            'Save Record',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -562,13 +655,24 @@ class _ExtraDoseScreenState extends State<ExtraDoseScreen> {
                         borderRadius: BorderRadius.circular(16),
                       ),
                     ),
-                    child: const Text(
-                      'Save Changes',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
+                    child: _isLoading
+                        ? const SizedBox(
+                            height: 24,
+                            width: 24,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.5,
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                Colors.white,
+                              ),
+                            ),
+                          )
+                        : const Text(
+                            'Save Changes',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
                   ),
                 ),
 

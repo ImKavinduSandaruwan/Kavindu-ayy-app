@@ -8,9 +8,22 @@ import 'package:app/screens/vitamin_k/vitamin_k_screen.dart';
 import 'package:app/screens/extra_medication/extra_medication_screen.dart';
 import 'package:app/screens/symptoms/symptoms_screen.dart';
 import 'package:app/screens/warmup/warmup_screen.dart';
+import 'package:app/services/notification_service.dart';
 import 'package:flutter/material.dart';
+import 'package:timezone/data/latest_all.dart' as tz;
+import 'package:timezone/timezone.dart' as tz;
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize timezone
+  tz.initializeTimeZones();
+  tz.setLocalLocation(tz.getLocation('Asia/Colombo'));
+
+  // Initialize notifications
+  final notificationService = NotificationService();
+  await notificationService.initialize();
+
   runApp(const App());
 }
 

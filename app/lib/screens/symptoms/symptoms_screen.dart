@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:app/services/tracker_service.dart';
+import 'package:app/services/user_preferences.dart';
+import 'package:intl/intl.dart';
 
 class SymptomsScreen extends StatefulWidget {
   const SymptomsScreen({super.key});
@@ -8,9 +11,11 @@ class SymptomsScreen extends StatefulWidget {
 }
 
 class _SymptomsScreenState extends State<SymptomsScreen> {
+  final _trackerService = TrackerService();
   final List<String> _selectedSymptoms = [];
   bool _noSymptoms = false;
   final TextEditingController _notesController = TextEditingController();
+  bool _isLoading = false;
 
   final List<Map<String, dynamic>> _symptoms = [
     {
@@ -106,7 +111,7 @@ class _SymptomsScreenState extends State<SymptomsScreen> {
   }
 
   bool _canSave() {
-    return _noSymptoms || _selectedSymptoms.isNotEmpty;
+    return !_isLoading && (_noSymptoms || _selectedSymptoms.isNotEmpty);
   }
 
   bool _hasSeriousSymptoms() {
@@ -161,37 +166,102 @@ class _SymptomsScreenState extends State<SymptomsScreen> {
     });
   }
 
-  void _saveSymptoms() {
-    if (_canSave()) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Row(
-            children: [
-              Icon(Icons.check_circle, color: Colors.white),
-              SizedBox(width: 12),
-              Text(
-                'Saved Successfully',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-              ),
-            ],
-          ),
-          backgroundColor: const Color(0xFFEF4444),
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          margin: const EdgeInsets.all(16),
-          duration: const Duration(seconds: 2),
-        ),
+  Future<void> _saveSymptoms() async {
+    if (!_canSave()) return;
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final userId = await UserPreferences.getUserId();
+      if (userId == null) {
+        _showErrorMessage('User not logged in');
+        return;
+      }
+
+      final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+
+      // Format symptoms list with labels
+      String? symptomsList;
+      if (_selectedSymptoms.isNotEmpty) {
+        symptomsList = _selectedSymptoms
+            .map((value) => _getSymptomLabel(value))
+            .join(': ');
+
+        // Add notes if provided
+        if (_notesController.text.isNotEmpty) {
+          symptomsList += ': ${_notesController.text}';
+        }
+      }
+
+      final success = await _trackerService.saveSymptoms(
+        patientId: userId,
+        date: today,
+        status: !_noSymptoms,
+        sList: symptomsList,
       );
 
-      // Navigate back after a short delay
-      Future.delayed(const Duration(seconds: 2), () {
-        if (mounted) {
-          Navigator.pop(context);
-        }
-      });
+      if (!mounted) return;
+
+      if (success) {
+        _showSuccessMessage();
+      } else {
+        _showErrorMessage('Failed to save. Please try again.');
+      }
+    } catch (e) {
+      print('Error saving symptoms: $e');
+      if (mounted) {
+        _showErrorMessage('An error occurred. Please try again.');
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
+  }
+
+  void _showSuccessMessage() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Row(
+          children: [
+            Icon(Icons.check_circle, color: Colors.white),
+            SizedBox(width: 12),
+            Text(
+              'Saved Successfully',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            ),
+          ],
+        ),
+        backgroundColor: const Color(0xFFEF4444),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: const EdgeInsets.all(16),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+
+    // Navigate back to dashboard after a short delay
+    Future.delayed(const Duration(seconds: 2), () {
+      if (mounted) {
+        Navigator.pushReplacementNamed(context, '/dashboard');
+      }
+    });
+  }
+
+  void _showErrorMessage(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: const Color(0xFFDC2626),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: const EdgeInsets.all(16),
+      ),
+    );
   }
 
   @override
@@ -551,20 +621,31 @@ class _SymptomsScreenState extends State<SymptomsScreen> {
                             borderRadius: BorderRadius.circular(16),
                           ),
                         ),
-                        child: const Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.check, size: 22),
-                            SizedBox(width: 8),
-                            Text(
-                              'Save Symptoms',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
+                        child: _isLoading
+                            ? const SizedBox(
+                                height: 24,
+                                width: 24,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2.5,
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    Colors.white,
+                                  ),
+                                ),
+                              )
+                            : const Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.check, size: 22),
+                                  SizedBox(width: 8),
+                                  Text(
+                                    'Save Symptoms',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
                               ),
-                            ),
-                          ],
-                        ),
                       ),
                     ),
                   ),

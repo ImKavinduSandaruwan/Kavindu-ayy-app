@@ -95,29 +95,28 @@ class _SplashScreenState extends State<SplashScreen> {
               const SizedBox(height: 16),
 
               // Sign Up Button
-              SizedBox(
-                width: double.infinity,
-                height: 56,
-                child: OutlinedButton(
-                  onPressed: () {
-                    Navigator.pushNamed(context, '/register');
-                  },
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: const Color(0xFF2B7EF8),
-                    side: const BorderSide(color: Color(0xFF2B7EF8), width: 2),
-                    backgroundColor: Colors.white,
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                  ),
-                  child: const Text(
-                    'Sign Up',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-                  ),
-                ),
-              ),
-
+              // SizedBox(
+              //   width: double.infinity,
+              //   height: 56,
+              //   child: OutlinedButton(
+              //     onPressed: () {
+              //       Navigator.pushNamed(context, '/register');
+              //     },
+              //     style: OutlinedButton.styleFrom(
+              //       foregroundColor: const Color(0xFF2B7EF8),
+              //       side: const BorderSide(color: Color(0xFF2B7EF8), width: 2),
+              //       backgroundColor: Colors.white,
+              //       elevation: 0,
+              //       shape: RoundedRectangleBorder(
+              //         borderRadius: BorderRadius.circular(16),
+              //       ),
+              //     ),
+              //     child: const Text(
+              //       'Sign Up',
+              //       style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+              //     ),
+              //   ),
+              // ),
               const SizedBox(height: 40),
 
               // Trust Indicators

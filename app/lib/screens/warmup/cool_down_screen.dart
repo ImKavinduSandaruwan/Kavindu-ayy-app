@@ -1,56 +1,51 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
-import 'walking_exercise_screen.dart';
+import 'post_exercise_monitoring_screen.dart';
 
-class WarmupScreen extends StatefulWidget {
-  const WarmupScreen({super.key});
+class CoolDownScreen extends StatefulWidget {
+  final double? spo2;
+  final double? pulse;
+  final double distanceCovered;
+  final int timeElapsed;
+  final Set<String> stopReasons;
+  final int? healthFactorId;
+
+  const CoolDownScreen({
+    super.key,
+    this.spo2,
+    this.pulse,
+    required this.distanceCovered,
+    required this.timeElapsed,
+    required this.stopReasons,
+    this.healthFactorId,
+  });
 
   @override
-  State<WarmupScreen> createState() => _WarmupScreenState();
+  State<CoolDownScreen> createState() => _CoolDownScreenState();
 }
 
-class _WarmupScreenState extends State<WarmupScreen> {
+class _CoolDownScreenState extends State<CoolDownScreen> {
   int _currentExercise = 1;
-  final int _totalExercises = 8;
-  int _secondsRemaining = 17;
+  final int _totalExercises = 5;
+  int _secondsRemaining = 60;
   Timer? _timer;
-  double? _spo2;
-  double? _pulse;
-  int? _healthFactorId;
 
   final List<Map<String, dynamic>> _exercises = [
-    {'name': 'Slow Breathing + Shoulder Rolls', 'completed': false},
-    {'name': 'Neck Mobility', 'completed': false},
-    {'name': 'Arm Circles', 'completed': false},
-    {'name': 'Marching in Place', 'completed': false},
-    {'name': 'Heel Raises / Toe Taps', 'completed': false},
-    {'name': 'Side-to-Side Step Touch', 'completed': false},
-    {'name': 'Gentle Leg Swings', 'completed': false},
-    {'name': 'Light Stretching (Hamstrings, Chest, Side)', 'completed': false},
+    {'name': 'Slow Walking / Marching', 'completed': false, 'duration': 60},
+    {'name': 'Deep Breathing', 'completed': false, 'duration': 60},
+    {
+      'name': 'Calf Stretch (30 sec each leg)',
+      'completed': false,
+      'duration': 60,
+    },
+    {'name': 'Hamstring Stretch', 'completed': false, 'duration': 60},
+    {'name': 'Shoulder & Chest Stretch', 'completed': false, 'duration': 60},
   ];
 
   @override
   void initState() {
     super.initState();
     _startTimer();
-    // Get vitals data from navigation arguments
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final args =
-          ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
-      if (args != null) {
-        print('=== Warmup Screen Received Arguments ===');
-        print(
-          'spo2: ${args['spo2']}, pulse: ${args['pulse']}, healthFactorId: ${args['healthFactorId']}',
-        );
-        setState(() {
-          _spo2 = args['spo2'] as double?;
-          _pulse = args['pulse'] as double?;
-          _healthFactorId = args['healthFactorId'] as int?;
-        });
-      } else {
-        print('=== Warmup Screen: No arguments received ===');
-      }
-    });
   }
 
   @override
@@ -77,37 +72,41 @@ class _WarmupScreenState extends State<WarmupScreen> {
       setState(() {
         _exercises[_currentExercise - 1]['completed'] = true;
         _currentExercise++;
-        _secondsRemaining = 17;
+        _secondsRemaining = _exercises[_currentExercise - 1]['duration'];
       });
       _startTimer();
+    } else {
+      // All exercises complete
+      setState(() {
+        _exercises[_currentExercise - 1]['completed'] = true;
+      });
     }
   }
 
-  double get _progress => _currentExercise / _totalExercises;
-  int get _overallProgress => (_progress * 100).round();
+  double get _exerciseProgress => _currentExercise / _totalExercises;
+  int get _overallProgress => (_exerciseProgress * 100).round();
+
+  String _formatTime(int seconds) {
+    int minutes = seconds ~/ 60;
+    int remainingSeconds = seconds % 60;
+    return '$minutes:${remainingSeconds.toString().padLeft(2, '0')}';
+  }
 
   @override
   Widget build(BuildContext context) {
+    final currentExerciseName = _exercises[_currentExercise - 1]['name'];
+
     return Scaffold(
       backgroundColor: const Color(0xFFE8EBF0),
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
-        leading: IconButton(
-          icon: const Icon(
-            Icons.arrow_back,
-            color: Color(0xFFF97316),
-            size: 28,
-          ),
-          onPressed: () {
-            Navigator.pop(context);
-          },
-        ),
+        automaticallyImplyLeading: false,
         title: const Text(
-          'Warm-Up',
+          'Cool Down',
           style: TextStyle(
-            color: Color(0xFF1A3B5D),
-            fontSize: 20,
+            color: Color(0xFF2B7EF8),
+            fontSize: 24,
             fontWeight: FontWeight.bold,
           ),
         ),
@@ -121,48 +120,47 @@ class _WarmupScreenState extends State<WarmupScreen> {
             children: [
               const SizedBox(height: 8),
 
-              // Warm-Up Routine Card
-              Center(
-                child: Container(
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [Color(0xFFF97316), Color(0xFFEA580C)],
+              // Header Card
+              Container(
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [Color(0xFF2B7EF8), Color(0xFF1E6FE8)],
+                  ),
+                  borderRadius: BorderRadius.circular(24),
+                ),
+                padding: const EdgeInsets.all(32),
+                child: Column(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.2),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.air,
+                        color: Colors.white,
+                        size: 48,
+                      ),
                     ),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  padding: const EdgeInsets.all(32),
-                  child: Column(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(20),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.2),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: const Icon(
-                          Icons.air,
-                          color: Colors.white,
-                          size: 48,
-                        ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Cool Down Routine',
+                      style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
                       ),
-                      const SizedBox(height: 20),
-                      const Text(
-                        'Warm-Up Routine',
-                        style: TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      const Text(
-                        'Prepare your body for walking',
-                        style: TextStyle(fontSize: 16, color: Colors.white),
-                      ),
-                    ],
-                  ),
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Recover safely after exercise',
+                      style: TextStyle(fontSize: 16, color: Colors.white),
+                    ),
+                  ],
                 ),
               ),
 
@@ -186,11 +184,11 @@ class _WarmupScreenState extends State<WarmupScreen> {
                           style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
-                            color: Color(0xFF1A3B5D),
+                            color: Color(0xFF6B7280),
                           ),
                         ),
                         Text(
-                          '0:${_secondsRemaining.toString().padLeft(2, '0')}',
+                          _formatTime(_secondsRemaining),
                           style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
@@ -199,11 +197,15 @@ class _WarmupScreenState extends State<WarmupScreen> {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 12),
+
+                    const SizedBox(height: 16),
+
                     ClipRRect(
                       borderRadius: BorderRadius.circular(4),
                       child: LinearProgressIndicator(
-                        value: _progress,
+                        value: (_secondsRemaining > 0
+                            ? (60 - _secondsRemaining) / 60
+                            : 1.0),
                         backgroundColor: const Color(0xFFE5E7EB),
                         valueColor: const AlwaysStoppedAnimation<Color>(
                           Color(0xFF1A3B5D),
@@ -211,23 +213,25 @@ class _WarmupScreenState extends State<WarmupScreen> {
                         minHeight: 8,
                       ),
                     ),
+
                     const SizedBox(height: 24),
 
                     // Current Exercise Display
                     Container(
+                      width: double.infinity,
                       padding: const EdgeInsets.all(24),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFFEF3C7),
+                        color: const Color(0xFFE8EBF0),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Column(
                         children: [
                           Text(
-                            _exercises[_currentExercise - 1]['name'],
+                            currentExerciseName,
                             style: const TextStyle(
                               fontSize: 20,
                               fontWeight: FontWeight.bold,
-                              color: Color(0xFF78350F),
+                              color: Color(0xFF2B7EF8),
                             ),
                             textAlign: TextAlign.center,
                           ),
@@ -235,16 +239,18 @@ class _WarmupScreenState extends State<WarmupScreen> {
                           Text(
                             '$_secondsRemaining',
                             style: const TextStyle(
-                              fontSize: 48,
+                              fontSize: 56,
                               fontWeight: FontWeight.bold,
-                              color: Color(0xFF78350F),
+                              color: Color(0xFF2B7EF8),
+                              height: 1,
                             ),
                           ),
+                          const SizedBox(height: 8),
                           const Text(
                             'seconds remaining',
                             style: TextStyle(
                               fontSize: 14,
-                              color: Color(0xFF78350F),
+                              color: Color(0xFF6B7280),
                             ),
                           ),
                         ],
@@ -254,23 +260,29 @@ class _WarmupScreenState extends State<WarmupScreen> {
                     const SizedBox(height: 24),
 
                     // Exercise List
-                    ..._exercises.asMap().entries.map((entry) {
-                      final index = entry.key;
-                      final exercise = entry.value;
+                    ...List.generate(_exercises.length, (index) {
+                      final exercise = _exercises[index];
+                      final isCurrentExercise = index == _currentExercise - 1;
                       final isCompleted = exercise['completed'];
-                      final isCurrent = index == _currentExercise - 1;
 
                       return Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
+                        padding: const EdgeInsets.only(bottom: 12.0),
                         child: Container(
-                          padding: const EdgeInsets.all(16),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 16,
+                          ),
                           decoration: BoxDecoration(
-                            color: isCompleted
-                                ? const Color(0xFFD1FAE5)
-                                : isCurrent
-                                ? const Color(0xFFFEF3C7)
-                                : const Color(0xFFF9FAFB),
+                            color: isCurrentExercise
+                                ? const Color(0xFFDEEBFF)
+                                : Colors.white,
                             borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: isCurrentExercise
+                                  ? const Color(0xFF2B7EF8)
+                                  : const Color(0xFFE5E7EB),
+                              width: isCurrentExercise ? 2 : 1,
+                            ),
                           ),
                           child: Row(
                             children: [
@@ -284,31 +296,29 @@ class _WarmupScreenState extends State<WarmupScreen> {
                                   border: Border.all(
                                     color: isCompleted
                                         ? const Color(0xFF10B981)
-                                        : const Color(0xFFD1D5DB),
+                                        : const Color(0xFFE5E7EB),
                                     width: 2,
                                   ),
-                                  borderRadius: BorderRadius.circular(6),
+                                  shape: BoxShape.circle,
                                 ),
                                 child: isCompleted
                                     ? const Icon(
                                         Icons.check,
-                                        color: Colors.white,
                                         size: 16,
+                                        color: Colors.white,
                                       )
                                     : null,
                               ),
-                              const SizedBox(width: 12),
+                              const SizedBox(width: 16),
                               Expanded(
                                 child: Text(
                                   exercise['name'],
                                   style: TextStyle(
                                     fontSize: 15,
-                                    color: isCompleted
-                                        ? const Color(0xFF059669)
-                                        : isCurrent
-                                        ? const Color(0xFF78350F)
+                                    color: isCurrentExercise
+                                        ? const Color(0xFF1A3B5D)
                                         : const Color(0xFF6B7280),
-                                    fontWeight: isCurrent
+                                    fontWeight: isCurrentExercise
                                         ? FontWeight.w600
                                         : FontWeight.normal,
                                   ),
@@ -322,11 +332,11 @@ class _WarmupScreenState extends State<WarmupScreen> {
 
                     const SizedBox(height: 24),
 
-                    // Progress Bar
+                    // Overall Progress
                     ClipRRect(
                       borderRadius: BorderRadius.circular(4),
                       child: LinearProgressIndicator(
-                        value: _progress,
+                        value: _exerciseProgress,
                         backgroundColor: const Color(0xFFE5E7EB),
                         valueColor: const AlwaysStoppedAnimation<Color>(
                           Color(0xFF1A3B5D),
@@ -353,34 +363,39 @@ class _WarmupScreenState extends State<WarmupScreen> {
                       height: 56,
                       child: ElevatedButton.icon(
                         onPressed: () {
+                          _timer?.cancel();
                           print(
-                            '=== Warmup -> Walking Exercise Navigation ===',
+                            '=== Cool Down -> Post-Exercise Monitoring Navigation ===',
                           );
                           print(
-                            'Passing vitals: spo2=$_spo2, pulse=$_pulse, healthFactorId=$_healthFactorId',
+                            'Passing vitals: spo2=${widget.spo2}, pulse=${widget.pulse}, healthFactorId=${widget.healthFactorId}',
                           );
-                          Navigator.push(
+                          Navigator.pushReplacement(
                             context,
                             MaterialPageRoute(
-                              builder: (context) => WalkingExerciseScreen(
-                                spo2: _spo2,
-                                pulse: _pulse,
-                                healthFactorId: _healthFactorId,
-                              ),
+                              builder: (context) =>
+                                  PostExerciseMonitoringScreen(
+                                    preExerciseSpo2: widget.spo2,
+                                    preExercisePulse: widget.pulse,
+                                    distanceCovered: widget.distanceCovered,
+                                    timeElapsed: widget.timeElapsed,
+                                    stopReasons: widget.stopReasons,
+                                    healthFactorId: widget.healthFactorId,
+                                  ),
                             ),
                           );
                         },
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF10B981),
+                          backgroundColor: const Color(0xFF2B7EF8),
                           foregroundColor: Colors.white,
                           elevation: 0,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
                           ),
                         ),
-                        icon: const Icon(Icons.play_arrow, size: 24),
+                        icon: const Icon(Icons.favorite, size: 24),
                         label: const Text(
-                          'Continue to Walking',
+                          'Continue to Vitals Check',
                           style: TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.w600,

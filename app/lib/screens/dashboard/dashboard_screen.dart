@@ -2,7 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:app/screens/home/home_screen.dart';
 import 'package:app/screens/dose_inr/dose_inr_screen.dart';
 import 'package:app/screens/insights/insights_screen.dart';
+import 'package:app/screens/report/report_screen.dart';
 import 'package:app/screens/recovery/recovery_screen.dart';
+import 'package:app/services/user_preferences.dart';
+import 'package:app/services/daily_action_service.dart';
+import 'package:intl/intl.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -13,13 +17,43 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   int _selectedIndex = 0;
+  final _dailyActionService = DailyActionService();
 
   final List<Widget> _pages = [
     const HomeScreen(),
     const DoseInrScreen(),
     const InsightsScreen(),
+    const ReportScreen(),
     const RecoveryScreen(),
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    _checkAndPerformDailyAction();
+  }
+
+  Future<void> _checkAndPerformDailyAction() async {
+    try {
+      final needsDailyAction = await UserPreferences.isDailyActionNeeded();
+
+      if (needsDailyAction) {
+        final userId = await UserPreferences.getUserId();
+        if (userId != null) {
+          print('Dashboard: Daily action needed - calling endpoint');
+          await _dailyActionService.performDailyAction(userId);
+
+          final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+          await UserPreferences.saveLastDailyActionDate(today);
+          print('Dashboard: Daily action completed and date saved: $today');
+        }
+      } else {
+        print('Dashboard: Daily action already performed today');
+      }
+    } catch (e) {
+      print('Dashboard: Error checking daily action: $e');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -45,7 +79,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 _buildNavItem(Icons.home_outlined, 'Home', 0),
                 _buildNavItem(Icons.show_chart, 'Dose & INR', 1),
                 _buildNavItem(Icons.trending_up, 'Insights', 2),
-                _buildNavItem(Icons.favorite_border, 'Recovery', 3),
+                _buildNavItem(Icons.description_outlined, 'Report', 3),
+                _buildNavItem(Icons.favorite_border, 'Recovery', 4),
               ],
             ),
           ),

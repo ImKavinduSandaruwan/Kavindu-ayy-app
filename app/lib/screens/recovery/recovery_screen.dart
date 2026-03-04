@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../../services/health_factor_service.dart';
+import '../../services/user_preferences.dart';
 
 class RecoveryScreen extends StatefulWidget {
   const RecoveryScreen({super.key});
@@ -14,6 +16,12 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
   final TextEditingController _pulseController = TextEditingController();
   String _vitalStatus = '';
   bool _showVitalWarning = false;
+
+  // Store vitals data
+  double? _savedSpo2;
+  double? _savedPulse;
+  int? _healthFactorId;
+  bool _isInitializing = false; // kept for potential future use
 
   @override
   void dispose() {
@@ -31,6 +39,10 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
     }
 
     setState(() {
+      // Save the vitals data
+      _savedSpo2 = spo2;
+      _savedPulse = pulse;
+
       // Check if vitals are in safe range
       // Normal SpO2: 95-100%, Normal resting pulse: 60-100 bpm
       if (spo2 < 95 || pulse < 60 || pulse > 100) {
@@ -189,10 +201,36 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
                           const SizedBox(width: 12),
                           Expanded(
                             child: ElevatedButton(
-                              onPressed: () {
-                                setState(() {
-                                  _showVitalsScreen = true;
-                                });
+                              onPressed: () async {
+                                // Get user ID
+                                final userId =
+                                    await UserPreferences.getUserId();
+
+                                // Fire API call in background (don't await result)
+                                if (userId != null) {
+                                  HealthFactorService.initializeSession(
+                                    userId,
+                                  ).then((result) {
+                                    if (result['success'] == true) {
+                                      final data = result['data'];
+                                      _healthFactorId = data['id'];
+                                      print(
+                                        'Health factor session initialized: $_healthFactorId',
+                                      );
+                                    } else {
+                                      print(
+                                        'Health factor init failed: ${result['error']}',
+                                      );
+                                    }
+                                  });
+                                }
+
+                                // Navigate immediately without waiting for API response
+                                if (mounted) {
+                                  setState(() {
+                                    _showVitalsScreen = true;
+                                  });
+                                }
                               },
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: const Color(0xFF10B981),
@@ -446,6 +484,17 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
             height: 56,
             child: ElevatedButton.icon(
               onPressed: () {
+                // Always save vitals before navigation
+                final spo2 = double.tryParse(_spo2Controller.text);
+                final pulse = double.tryParse(_pulseController.text);
+
+                if (spo2 != null && pulse != null) {
+                  setState(() {
+                    _savedSpo2 = spo2;
+                    _savedPulse = pulse;
+                  });
+                }
+
                 if (_showVitalWarning && _vitalStatus == 'Danger') {
                   // Show warning dialog
                   showDialog(
@@ -498,7 +547,15 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
                         TextButton(
                           onPressed: () {
                             Navigator.pop(context);
-                            Navigator.pushNamed(context, '/warmup');
+                            Navigator.pushNamed(
+                              context,
+                              '/warmup',
+                              arguments: {
+                                'spo2': _savedSpo2,
+                                'pulse': _savedPulse,
+                                'healthFactorId': _healthFactorId,
+                              },
+                            );
                           },
                           child: const Text(
                             'Continue Anyway',
@@ -513,7 +570,19 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
                     ),
                   );
                 } else {
-                  Navigator.pushNamed(context, '/warmup');
+                  print('=== Recovery -> Warmup Navigation ===');
+                  print(
+                    'Passing vitals: spo2=$_savedSpo2, pulse=$_savedPulse, healthFactorId=$_healthFactorId',
+                  );
+                  Navigator.pushNamed(
+                    context,
+                    '/warmup',
+                    arguments: {
+                      'spo2': _savedSpo2,
+                      'pulse': _savedPulse,
+                      'healthFactorId': _healthFactorId,
+                    },
+                  );
                 }
               },
               style: ElevatedButton.styleFrom(

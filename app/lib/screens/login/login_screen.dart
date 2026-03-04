@@ -1,4 +1,8 @@
 import 'package:flutter/material.dart';
+import '../../services/auth_service.dart';
+import '../../services/user_preferences.dart';
+import '../../services/daily_action_service.dart';
+import 'package:intl/intl.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -10,13 +14,121 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _authService = AuthService();
+  final _dailyActionService = DailyActionService();
   bool _obscurePassword = true;
+  bool _isLoading = false;
 
   @override
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
+  }
+
+  Future<void> _handleLogin() async {
+    // Validate inputs
+    if (_emailController.text.trim().isEmpty) {
+      _showErrorDialog('Please enter your email or phone number');
+      return;
+    }
+
+    if (_passwordController.text.isEmpty) {
+      _showErrorDialog('Please enter your password');
+      return;
+    }
+
+    // Show loading
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      // Call login API
+      final response = await _authService.login(
+        _emailController.text.trim(),
+        _passwordController.text,
+      );
+
+      //final response = await _authService.login("u2@gmail.com", "1234");
+
+      if (!mounted) return;
+
+      // Check if login was successful
+      if (response.isSuccess && response.userId != null) {
+        // Save user data locally
+        // await UserPreferences.saveUserData(
+        //   userId: response.userId!,
+        //   username: response.username,
+        //   role: response.role,
+        // );
+
+        await UserPreferences.saveUserData(
+          userId: int.parse(
+            response.username!,
+          ), // Converting username string to int for userId
+          username: response.userId?.toString(),
+          role: response.role,
+        );
+
+        // Check if daily action is needed (once per day)
+        final needsDailyAction = await UserPreferences.isDailyActionNeeded();
+
+        if (needsDailyAction) {
+          print('Daily action needed - calling endpoint');
+          await _dailyActionService.performDailyAction(response.userId!);
+
+          final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+          await UserPreferences.saveLastDailyActionDate(today);
+          print('Daily action completed and date saved: $today');
+        } else {
+          print('Daily action already performed today');
+        }
+
+        // Check if user has already completed registration before (once per install)
+        final registrationDone =
+            await UserPreferences.hasCompletedRegistration();
+
+        // Navigate: first time → register, returning user → dashboard directly
+        if (!mounted) return;
+        if (registrationDone) {
+          print('Registration already completed — going to dashboard');
+          Navigator.pushReplacementNamed(context, '/dashboard');
+        } else {
+          print('First time after install — going to register');
+          Navigator.pushReplacementNamed(context, '/register');
+        }
+      } else {
+        // Show error message
+        _showErrorDialog(response.msg);
+      }
+    } catch (e) {
+      if (!mounted) return;
+      print('Login error: $e');
+      _showErrorDialog('An error occurred: ${e.toString()}');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  void _showErrorDialog(String message) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Login Failed'),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -203,9 +315,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 width: double.infinity,
                 height: 56,
                 child: ElevatedButton(
-                  onPressed: () {
-                    Navigator.pushReplacementNamed(context, '/dashboard');
-                  },
+                  onPressed: _isLoading ? null : _handleLogin,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF2B7EF8),
                     foregroundColor: Colors.white,
@@ -213,11 +323,28 @@ class _LoginScreenState extends State<LoginScreen> {
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(16),
                     ),
+                    disabledBackgroundColor: const Color(
+                      0xFF2B7EF8,
+                    ).withOpacity(0.6),
                   ),
-                  child: const Text(
-                    'Login',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-                  ),
+                  child: _isLoading
+                      ? const SizedBox(
+                          height: 24,
+                          width: 24,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.5,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              Colors.white,
+                            ),
+                          ),
+                        )
+                      : const Text(
+                          'Login',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                 ),
               ),
 
